@@ -1,6 +1,15 @@
-const { default: makeWASocket, useMultiFileAuthState, delay, downloadContentFromMessage, DisconnectReason, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
+const { 
+    default: makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    DisconnectReason,
+    downloadContentFromMessage
+} = require("@whiskeysockets/baileys");
+
 const pino = require("pino");
 const http = require("http");
+
+// ================= CONFIG =================
 
 const config = {
     owner: "243986860268",
@@ -11,12 +20,19 @@ const config = {
     image: "https://i.supaimg.com/ba0cda0b-0be1-4bc3-b8c9-c0f903bcc6bf/cee23d05-8cd3-49de-b6ee-8df91763633a.jpg"
 };
 
-// Serveur de maintien Render
+// ================= RENDER KEEP ALIVE =================
+
 const port = process.env.PORT || 3000;
-http.createServer((req, res) => { res.writeHead(200); res.end('Elite System Active'); }).listen(port);
+http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Elite System Active");
+}).listen(port);
+
+// ================= START BOT =================
 
 async function start() {
-    const { state, saveCreds } = await useMultiFileAuthState('session_elite');
+
+    const { state, saveCreds } = await useMultiFileAuthState("session_elite");
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
@@ -29,151 +45,169 @@ async function start() {
 
     if (!sock.authState.creds.registered) {
         setTimeout(async () => {
-            let code = await sock.requestPairingCode(config.phoneNumber);
-            console.log(`\n\n🌑 CODE DE CONNEXION : ${code}\n\n`);
-        }, 5000);
+            const code = await sock.requestPairingCode(config.phoneNumber);
+            console.log("\nCODE DE CONNEXION :", code, "\n");
+        }, 4000);
     }
 
-    sock.ev.on('creds.update', saveCreds);
-    sock.ev.on('connection.update', (u) => { if (u.connection === 'close') start(); });
+    sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on('messages.upsert', async (m) => {
+    sock.ev.on("connection.update", (update) => {
+        if (update.connection === "close") {
+            const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) start();
+        }
+    });
+
+    sock.ev.on("messages.upsert", async (m) => {
+
         const msg = m.messages[0];
-        if (!msg.message || msg.key.remoteJid === 'status@broadcast' || msg.message.protocolMessage) return;
+        if (!msg.message || msg.key.remoteJid === "status@broadcast") return;
 
         const from = msg.key.remoteJid;
-        const isGroup = from.endsWith('@g.us');
+        const isGroup = from.endsWith("@g.us");
         const sender = msg.key.participant || msg.key.remoteJid;
         const isOwner = sender.includes(config.owner) || msg.key.fromMe;
-        const body = (msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || "").trim();
+
+        const body = (
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            ""
+        ).trim();
 
         if (!body.startsWith(config.prefix)) return;
-        const arg = body.slice(config.prefix.length).trim().split(/ +/g);
-        const cmd = arg.shift().toLowerCase();
+
+        const args = body.slice(config.prefix.length).trim().split(/ +/g);
+        const cmd = args.shift().toLowerCase();
 
         const getAdmin = async () => {
             if (!isGroup) return false;
             const meta = await sock.groupMetadata(from);
-            return !!meta.participants.find(p => p.id === sock.user.id.split(':')[0] + '@s.whatsapp.net')?.admin;
+            const botId = sock.user.id.split(":")[0] + "@s.whatsapp.net";
+            return !!meta.participants.find(p => p.id === botId)?.admin;
         };
 
         try {
-            if (isOwner) await sock.sendMessage(from, { react: { text: "🌑", key: msg.key } });
 
-            switch (cmd) {
-                case 'menu':
-                case 'help':
-                    const menu = `╭━━━〔 *${config.name}* 〕━━━┈⊷
-┃ 👤 *Maître :* ${config.chef}
-╰━━━━━━━━━━━━━━━━━━┈⊷
+            // ================= MENU =================
 
- ⚡ *SECTION : GESTION*
- ━━━━━━━━━━━━━━━
- ϟ .promote
- ϟ .demote
- ϟ .kick
- ϟ .purge
- ϟ .tagadmin
- ϟ .del
- ϟ .block
- ϟ .unblock
- ━━━━━━━━━━━━━━━
+            if (cmd === "menu" || cmd === "help") {
 
- 🛡️ *SECTION : PROTECTION*
- ━━━━━━━━━━━━━━━
- ϟ .antilink
- ϟ .antibot
- ϟ .welcome
- ϟ .antivv
- ━━━━━━━━━━━━━━━
+                const menu = `
+╔══════════════════════════════╗
+        ${config.name}
+╚══════════════════════════════╝
 
- 🌑 *SECTION : DOMINATION*
- ━━━━━━━━━━━━━━━
- ϟ .domination
- ϟ .liberation
- ϟ .hidetag
- ϟ .setname
- ϟ .setdesc
- ━━━━━━━━━━━━━━━
+👑 Chef : ${config.chef}
+🩸 Créateur : KIYOTAKA AYANOKOJI 
+🕯 Lignée : Fils du Grand Monarque
 
- 🎭 *SECTION : TECHNIQUE*
- ━━━━━━━━━━━━━━━
- ϟ .owner
- ϟ .vv
- ϟ .ping
- ϟ .runtime
- ϟ .speed
- ━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
+⚔️ GESTION
+━━━━━━━━━━━━━━━━━━━━━━
+• .promote
+• .demote
+• .kick
+• .purge
+• .tagadmin
+• .del
+• .block
+• .unblock
 
- 🎲 *SECTION : LOISIR*
- ━━━━━━━━━━━━━━━
- ϟ .love
- ϟ .quote
- ϟ .say
- ϟ .insulte
- ϟ .weather
- ━━━━━━━━━━━━━━━
- *BY DARK ZEN SYSTEM*`;
-                    await sock.sendMessage(from, { image: { url: config.image }, caption: menu }, { quoted: msg });
-                    break;
+━━━━━━━━━━━━━━━━━━━━━━
+🛡 PROTECTION
+━━━━━━━━━━━━━━━━━━━━━━
+• .antilink
+• .antibot
+• .welcome
+• .antivv
 
-                case 'owner':
-                case 'honneur':
-                    const bio = `╭━━━〔 *BIOGRAPHIE* 〕━━━┈⊷
-┃ 👤 *Nom :* Kiyotaka Ayanokoji
-┃ 🌑 *Statut :* Leader Élite
-╰━━━━━━━━━━━━━━━━━━┈⊷`;
-                    await sock.sendMessage(from, { image: { url: config.image }, caption: bio }, { quoted: msg });
-                    break;
+━━━━━━━━━━━━━━━━━━━━━━
+🌑 DOMINATION
+━━━━━━━━━━━━━━━━━━━━━━
+• .domination
+• .liberation
+• .hidetag
+• .setname
+• .setdesc
 
-                case 'ping': await sock.sendMessage(from, { text: "🚀 *Système réactif.*" }); break;
+━━━━━━━━━━━━━━━━━━━━━━
+⚙️ TECHNIQUE
+━━━━━━━━━━━━━━━━━━━━━━
+• .owner
+• .vv
+• .ping
+• .runtime
+• .speed
 
-                case 'domination':
-                    if (isOwner && isGroup) {
-                        if (await getAdmin()) {
-                            await sock.groupSettingUpdate(from, 'announcement');
-                            await sock.sendMessage(from, { text: "🌑 *Le groupe est maintenant sous contrôle total (Fermé).*"});
-                        } else {
-                            await sock.sendMessage(from, { text: "❌ *Erreur :* Donnez les droits admin au bot."});
-                        }
-                    }
-                    break;
+━━━━━━━━━━━━━━━━━━━━━━
+🎭 LOISIR
+━━━━━━━━━━━━━━━━━━━━━━
+• .love
+• .quote
+• .say
+• .insulte
+• .weather
 
-                case 'liberation':
-                    if (isOwner && isGroup && await getAdmin()) {
-                        await sock.groupSettingUpdate(from, 'not_announcement');
-                        await sock.sendMessage(from, { text: "🔓 *Le groupe est libéré (Ouvert).* "});
-                    }
-                    break;
+━━━━━━━━━━━━━━━━━━━━━━
+« Le stratège parle peu.
+Mais agit parfaitement. »
+— Cœur de Code-
+━━━━━━━━━━━━━━━━━━━━━━
+`;
 
-                case 'hidetag':
-                    if (isOwner && isGroup) {
-                        const meta = await sock.groupMetadata(from);
-                        await sock.sendMessage(from, { text: arg.join(' ') || 'Attention !', mentions: meta.participants.map(a => a.id) });
-                    }
-                    break;
+                await sock.sendMessage(from, {
+                    image: { url: config.image },
+                    caption: menu
+                }, { quoted: msg });
 
-                case 'vv':
-                    const q = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-                    if (q) {
-                        const type = Object.keys(q)[0];
-                        const stream = await downloadContentFromMessage(q[type], type.replace('Message', ''));
-                        let buffer = Buffer.from([]);
-                        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-                        await sock.sendMessage(from, { [type.replace('Message', '')]: buffer, caption: "🌑 *Vue unique extraite.*" });
-                    }
-                    break;
-
-                case 'kick':
-                    if (isOwner && isGroup && await getAdmin()) {
-                        let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
-                        if (target) await sock.groupParticipantsUpdate(from, [target], 'remove');
-                    }
-                    break;
-                
-                case 'say': await sock.sendMessage(from, { text: arg.join(' ') }); break;
+                return;
             }
-        } catch (e) { console.log("Erreur :", e); }
+
+            // ================= COMMANDES =================
+
+            if (cmd === "ping") {
+                await sock.sendMessage(from, { text: "🚀 Système opérationnel." });
+            }
+
+            if (cmd === "runtime") {
+                await sock.sendMessage(from, { text: `⏳ Runtime : ${Math.floor(process.uptime())} sec` });
+            }
+
+            if (cmd === "speed") {
+                const start = Date.now();
+                const end = Date.now();
+                await sock.sendMessage(from, { text: `⚡ ${end - start} ms` });
+            }
+
+            if (cmd === "love") {
+                const percent = Math.floor(Math.random() * 100);
+                await sock.sendMessage(from, { text: `❤️ Compatibilité : ${percent}%` });
+            }
+
+            if (cmd === "quote") {
+                await sock.sendMessage(from, { text: "« L’intelligence froide est l’arme la plus silencieuse. »" });
+            }
+
+            if (cmd === "insulte") {
+                await sock.sendMessage(from, { text: "Tu n’es pas inutile… juste un fdp con." });
+            }
+
+            if (cmd === "say") {
+                await sock.sendMessage(from, { text: args.join(" ") });
+            }
+
+            if (cmd === "weather") {
+                await sock.sendMessage(from, { text: "🌤 API météo non configurée." });
+            }
+
+        } catch (err) {
+            console.log("Erreur :", err);
+        }
+
     });
+
 }
+
 start();

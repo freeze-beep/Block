@@ -1,15 +1,15 @@
 const { default: makeWASocket, useMultiFileAuthState, delay, downloadContentFromMessage, DisconnectReason, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const pino = require("pino");
-const fs = require('fs');
-const qrcode = require("qrcode-terminal");
 
 const config = {
     owner: "243986860268",
-    phoneNumber: "243986860268",
+    phoneNumber: "243986860268", // Ton numéro pour le code de connexion
     name: "AYANOKOJI-BOT",
     chef: "Kiyotaka Ayanokoji",
     section: "Classroom of the Elite",
-    prefix: "."
+    prefix: ".",
+    // LIEN DE TON IMAGE
+    image: "https://i.supaimg.com/ba0cda0b-0be1-4bc3-b8c9-c0f903bcc6bf/cee23d05-8cd3-49de-b6ee-8df91763633a.jpg"
 };
 
 async function start() {
@@ -20,19 +20,23 @@ async function start() {
         version,
         auth: state,
         logger: pino({ level: "silent" }),
-        printQRInTerminal: false,
+        printQRInTerminal: false, // On utilise le code de connexion pour Render
         browser: ["Ayanokoji-V2", "Chrome", "1.0.0"]
     });
 
+    // --- SYSTÈME DE CONNEXION PAR CODE ---
     if (!sock.authState.creds.registered) {
         setTimeout(async () => {
             let code = await sock.requestPairingCode(config.phoneNumber);
-            console.log(`\n\n🌑 CODE DE CONNEXION : ${code}\n\n`);
+            console.log(`\n\n🌑 [SYSTÈME ÉLITE] TON CODE DE CONNEXION : ${code}\n\n`);
         }, 5000);
     }
 
     sock.ev.on('creds.update', saveCreds);
-    sock.ev.on('connection.update', (u) => { if (u.connection === 'close') start(); });
+    sock.ev.on('connection.update', (u) => { 
+        if (u.connection === 'open') console.log("✅ EMPIRE AYANOKOJI OPÉRATIONNEL");
+        if (u.connection === 'close') start(); 
+    });
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
@@ -52,6 +56,7 @@ async function start() {
             if (isOwner) await sock.sendMessage(from, { react: { text: "🌑", key: msg.key } });
 
             switch (cmd) {
+                // --- 📑 MENU VERTICAL (1-5) ---
                 case 'menu':
                 case 'help':
                     const menu = `╭━━━〔 *${config.name}* 〕━━━┈⊷
@@ -104,43 +109,77 @@ async function start() {
 ┃ ϟ .weather
 ╰━━━━━━━━━━━━━━━━━━┈⊷
    *BY DARK ZEN SYSTEM*`;
-
-                    if (fs.existsSync('./media/menu.jpg')) {
-                        await sock.sendMessage(from, { image: fs.readFileSync('./media/menu.jpg'), caption: menu }, { quoted: msg });
-                    }
-                    if (fs.existsSync('./media/zq.mp3')) {
-                        await sock.sendMessage(from, { audio: fs.readFileSync('./media/zq.mp3'), mimetype: 'audio/mp4', ptt: true }, { quoted: msg });
-                    }
+                    
+                    await sock.sendMessage(from, { 
+                        image: { url: config.image }, 
+                        caption: menu 
+                    }, { quoted: msg });
                     break;
 
+                // --- 👤 BIOGRAPHIE (6-7) ---
                 case 'owner':
+                case 'honneur':
                     const bio = `╭━━━〔 *DOSSIER ÉLITE* 〕━━━┈⊷
 ┃ 👤 *Sujet :* ${config.chef}
 ┃ 📚 *Section :* ${config.section}
 ┃ 🌑 *Origine :* Fils du Grand Monarque
-┃ 🎵 *Signature :* ZQ
-╰━━━━━━━━━━━━━━━━━━┈⊷`;
-                    if (fs.existsSync('./media/menu.jpg')) {
-                        await sock.sendMessage(from, { image: fs.readFileSync('./media/menu.jpg'), caption: bio }, { quoted: msg });
-                    }
+┃ 🎵 *Signature :* En attente...
+╰━━━━━━━━━━━━━━━━━━┈⊷
+*“Toutes les personnes ne sont rien d'autre que des outils. Peu importe la méthode, tant que je gagne à la fin, tout va bien.”*`;
+                    await sock.sendMessage(from, { 
+                        image: { url: config.image }, 
+                        caption: bio 
+                    }, { quoted: msg });
                     break;
 
+                // --- ⚔️ GESTION & DROITS (8-15) ---
                 case 'purge':
                     if (!isOwner || !isGroup) return;
-                    await sock.sendMessage(from, { text: "👁️ *Purification en cours...*" });
+                    await sock.sendMessage(from, { text: "👁️ *Kiyotaka* purifie la zone..." });
                     const mt = await sock.groupMetadata(from);
-                    for (let p of mt.participants) { if (!p.admin) { await delay(450); await sock.groupParticipantsUpdate(from, [p.id], "remove"); } }
-                    await sock.sendMessage(from, { text: "🌑 *Zone purifiée.*" });
+                    for (let p of mt.participants) { if (!p.admin) { await delay(500); await sock.groupParticipantsUpdate(from, [p.id], "remove"); } }
+                    await sock.sendMessage(from, { text: "🌑 *“Vous n'étiez que des pions défectueux. Purification terminée.”*" });
                     break;
 
                 case 'promote':
                 case 'demote':
                     if (!isOwner || !isGroup) return;
                     let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
-                    await sock.groupParticipantsUpdate(from, [target], cmd);
-                    await sock.sendMessage(from, { text: `✅ Mise à jour terminée.` });
+                    if (target) {
+                        await sock.groupParticipantsUpdate(from, [target], cmd);
+                        await sock.sendMessage(from, { text: `✅ Statut @${target.split('@')[0]} mis à jour.`, mentions: [target] });
+                    }
                     break;
 
+                case 'kick':
+                    if (!isOwner || !isGroup) return;
+                    let k = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
+                    if (k) await sock.groupParticipantsUpdate(from, [k], "remove");
+                    break;
+
+                case 'del':
+                    if (isOwner && msg.message.extendedTextMessage?.contextInfo) {
+                        await sock.sendMessage(from, { delete: msg.message.extendedTextMessage.contextInfo.stanzaId });
+                    }
+                    break;
+
+                // --- 🛡️ PROTECTION (16-20) ---
+                case 'antilink':
+                    if (!isOwner || !isGroup) return;
+                    config.antilink = arg[0] === 'on';
+                    await sock.sendMessage(from, { text: `🛡️ Antilink : ${arg[0]}` });
+                    break;
+
+                // --- 🌑 DOMINATION (21-25) ---
+                case 'domination': if (isOwner) await sock.groupSettingUpdate(from, 'announcement'); break;
+                case 'liberation': if (isOwner) await sock.groupSettingUpdate(from, 'not_announcement'); break;
+                case 'hidetag':
+                    if (!isOwner) return;
+                    const meta = await sock.groupMetadata(from);
+                    await sock.sendMessage(from, { text: arg.join(' '), mentions: meta.participants.map(a => a.id) });
+                    break;
+
+                // --- 🎭 TECHNIQUE (26-32) ---
                 case 'vv':
                     const q = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     if (q) {
@@ -151,19 +190,24 @@ async function start() {
                         await sock.sendMessage(from, { [type.replace('Message', '')]: buffer, caption: "🌑 *Secret extrait.*" });
                     }
                     break;
-
-                case 'ping': await sock.sendMessage(from, { text: "🚀 *Système réactif.*" }); break;
-                case 'hidetag':
-                    if (!isOwner) return;
-                    const meta = await sock.groupMetadata(from);
-                    await sock.sendMessage(from, { text: arg.join(' '), mentions: meta.participants.map(a => a.id) });
+                case 'ping': await sock.sendMessage(from, { text: "🚀 *Système réactif : 0.02ms*" }); break;
+                case 'runtime': await sock.sendMessage(from, { text: `⌚ *Activité :* ${process.uptime().toFixed(0)}s` }); break;
+                
+                // --- 🎲 FUN (33-40) ---
+                case 'love': 
+                    await sock.sendMessage(from, { text: `❤️ *Affinité :* ${Math.floor(Math.random() * 100)}%` }); 
                     break;
-                case 'domination': if (isOwner) await sock.groupSettingUpdate(from, 'announcement'); break;
-                case 'liberation': if (isOwner) await sock.groupSettingUpdate(from, 'not_announcement'); break;
+                case 'say': await sock.sendMessage(from, { text: arg.join(' ') }); break;
+                case 'quote':
+                    const quotes = ["Gagner est tout.", "La liberté sans force est inutile.", "Les humains ne sont que des outils."];
+                    await sock.sendMessage(from, { text: quotes[Math.floor(Math.random()*quotes.length)] });
+                    break;
+                case 'insulte':
+                    await sock.sendMessage(from, { text: "Tu n'es qu'une erreur dans mon calcul." });
+                    break;
             }
-        } catch (e) { console.log(e); }
+        } catch (e) { console.log("ERREUR :", e); }
     });
 }
 
 start();
-

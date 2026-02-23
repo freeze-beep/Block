@@ -1,4 +1,4 @@
-const { 
+const {
     default: makeWASocket,
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
@@ -20,7 +20,7 @@ const config = {
     image: "https://i.supaimg.com/ba0cda0b-0be1-4bc3-b8c9-c0f903bcc6bf/cee23d05-8cd3-49de-b6ee-8df91763633a.jpg"
 };
 
-// ================= RENDER KEEP ALIVE =================
+// ================= KEEP ALIVE =================
 
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
@@ -28,7 +28,7 @@ http.createServer((req, res) => {
     res.end("Elite System Active");
 }).listen(port);
 
-// ================= START BOT =================
+// ================= START =================
 
 async function start() {
 
@@ -46,7 +46,7 @@ async function start() {
     if (!sock.authState.creds.registered) {
         setTimeout(async () => {
             const code = await sock.requestPairingCode(config.phoneNumber);
-            console.log("\nCODE DE CONNEXION :", code, "\n");
+            console.log("\nCODE :", code, "\n");
         }, 4000);
     }
 
@@ -54,7 +54,8 @@ async function start() {
 
     sock.ev.on("connection.update", (update) => {
         if (update.connection === "close") {
-            const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            const shouldReconnect =
+                update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) start();
         }
     });
@@ -69,12 +70,11 @@ async function start() {
         const sender = msg.key.participant || msg.key.remoteJid;
         const isOwner = sender.includes(config.owner) || msg.key.fromMe;
 
-        const body = (
+        const body =
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
             msg.message.imageMessage?.caption ||
-            ""
-        ).trim();
+            "";
 
         if (!body.startsWith(config.prefix)) return;
 
@@ -88,6 +88,9 @@ async function start() {
             return !!meta.participants.find(p => p.id === botId)?.admin;
         };
 
+        const getMentioned = () =>
+            msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+
         try {
 
             // ================= MENU =================
@@ -95,17 +98,11 @@ async function start() {
             if (cmd === "menu" || cmd === "help") {
 
                 const menu = `
-╔══════════════════════════════╗
-        ${config.name}
-╚══════════════════════════════╝
+╔══════════════════════╗
+      ${config.name}
+╚══════════════════════╝
 
-👑 Chef : ${config.chef}
-🩸 Créateur : KIYOTAKA AYANOKOJI 
-🕯 Lignée : Fils du Grand Monarque
-
-━━━━━━━━━━━━━━━━━━━━━━
 ⚔️ GESTION
-━━━━━━━━━━━━━━━━━━━━━━
 • .promote
 • .demote
 • .kick
@@ -114,47 +111,33 @@ async function start() {
 • .del
 • .block
 • .unblock
-
-━━━━━━━━━━━━━━━━━━━━━━
+|===============|
 🛡 PROTECTION
-━━━━━━━━━━━━━━━━━━━━━━
 • .antilink
 • .antibot
 • .welcome
 • .antivv
-
-━━━━━━━━━━━━━━━━━━━━━━
+|===============|
 🌑 DOMINATION
-━━━━━━━━━━━━━━━━━━━━━━
 • .domination
 • .liberation
 • .hidetag
 • .setname
 • .setdesc
-
-━━━━━━━━━━━━━━━━━━━━━━
-⚙️ TECHNIQUE
-━━━━━━━━━━━━━━━━━━━━━━
+|===============|
+⚙️ TECH
 • .owner
 • .vv
 • .ping
 • .runtime
 • .speed
-
-━━━━━━━━━━━━━━━━━━━━━━
+|===============|
 🎭 LOISIR
-━━━━━━━━━━━━━━━━━━━━━━
 • .love
 • .quote
 • .say
 • .insulte
 • .weather
-
-━━━━━━━━━━━━━━━━━━━━━━
-« Le stratège parle peu.
-Mais agit parfaitement. »
-— Cœur de Code-
-━━━━━━━━━━━━━━━━━━━━━━
 `;
 
                 await sock.sendMessage(from, {
@@ -165,42 +148,103 @@ Mais agit parfaitement. »
                 return;
             }
 
-            // ================= COMMANDES =================
+            // ================= GROUP =================
 
-            if (cmd === "ping") {
-                await sock.sendMessage(from, { text: "🚀 Système opérationnel." });
+            if (cmd === "promote" && isOwner && isGroup && await getAdmin()) {
+                const user = getMentioned();
+                if (user) await sock.groupParticipantsUpdate(from, [user], "promote");
             }
 
-            if (cmd === "runtime") {
-                await sock.sendMessage(from, { text: `⏳ Runtime : ${Math.floor(process.uptime())} sec` });
+            if (cmd === "demote" && isOwner && isGroup && await getAdmin()) {
+                const user = getMentioned();
+                if (user) await sock.groupParticipantsUpdate(from, [user], "demote");
             }
 
-            if (cmd === "speed") {
-                const start = Date.now();
-                const end = Date.now();
-                await sock.sendMessage(from, { text: `⚡ ${end - start} ms` });
+            if (cmd === "kick" && isOwner && isGroup && await getAdmin()) {
+                const user = getMentioned();
+                if (user) await sock.groupParticipantsUpdate(from, [user], "remove");
             }
 
-            if (cmd === "love") {
-                const percent = Math.floor(Math.random() * 100);
-                await sock.sendMessage(from, { text: `❤️ Compatibilité : ${percent}%` });
+            if (cmd === "purge" && isOwner && isGroup && await getAdmin()) {
+                const meta = await sock.groupMetadata(from);
+                const members = meta.participants.filter(p => !p.admin).map(p => p.id);
+                await sock.groupParticipantsUpdate(from, members, "remove");
             }
 
-            if (cmd === "quote") {
-                await sock.sendMessage(from, { text: "« L’intelligence froide est l’arme la plus silencieuse. »" });
+            if (cmd === "tagadmin" && isGroup) {
+                const meta = await sock.groupMetadata(from);
+                const admins = meta.participants.filter(p => p.admin).map(p => p.id);
+                await sock.sendMessage(from, { text: "Admins du groupe", mentions: admins });
             }
 
-            if (cmd === "insulte") {
-                await sock.sendMessage(from, { text: "Tu n’es pas inutile… juste un fdp con." });
+            if (cmd === "domination" && isOwner && isGroup && await getAdmin()) {
+                await sock.groupSettingUpdate(from, "announcement");
             }
 
-            if (cmd === "say") {
+            if (cmd === "liberation" && isOwner && isGroup && await getAdmin()) {
+                await sock.groupSettingUpdate(from, "not_announcement");
+            }
+
+            if (cmd === "setname" && isOwner && isGroup && await getAdmin()) {
+                await sock.groupUpdateSubject(from, args.join(" "));
+            }
+
+            if (cmd === "setdesc" && isOwner && isGroup && await getAdmin()) {
+                await sock.groupUpdateDescription(from, args.join(" "));
+            }
+
+            if (cmd === "hidetag" && isGroup) {
+                const meta = await sock.groupMetadata(from);
+                const members = meta.participants.map(p => p.id);
+                await sock.sendMessage(from, { text: args.join(" ") || "Attention", mentions: members });
+            }
+
+            // ================= OWNER =================
+
+            if (cmd === "block" && isOwner) {
+                const user = getMentioned();
+                if (user) await sock.updateBlockStatus(user, "block");
+            }
+
+            if (cmd === "unblock" && isOwner) {
+                const user = getMentioned();
+                if (user) await sock.updateBlockStatus(user, "unblock");
+            }
+
+            if (cmd === "del" && isOwner) {
+                await sock.sendMessage(from, { delete: msg.key });
+            }
+
+            // ================= TECH =================
+
+            if (cmd === "ping")
+                await sock.sendMessage(from, { text: "🚀 Online." });
+
+            if (cmd === "runtime")
+                await sock.sendMessage(from, { text: `⏳ ${Math.floor(process.uptime())} sec` });
+
+            if (cmd === "speed")
+                await sock.sendMessage(from, { text: "⚡ Ultra rapide." });
+
+            if (cmd === "owner")
+                await sock.sendMessage(from, { text: `👑 Owner : ${config.owner}` });
+
+            // ================= FUN =================
+
+            if (cmd === "love")
+                await sock.sendMessage(from, { text: `❤️ ${Math.floor(Math.random()*100)}%` });
+
+            if (cmd === "quote")
+                await sock.sendMessage(from, { text: "« L’esprit domine la force. »" });
+
+            if (cmd === "insulte")
+                await sock.sendMessage(from, { text: "Même ton ombre hésite à te suivre fdp." });
+
+            if (cmd === "say")
                 await sock.sendMessage(from, { text: args.join(" ") });
-            }
 
-            if (cmd === "weather") {
-                await sock.sendMessage(from, { text: "🌤 API météo non configurée." });
-            }
+            if (cmd === "weather")
+                await sock.sendMessage(from, { text: "🌤 API non configurée." });
 
         } catch (err) {
             console.log("Erreur :", err);

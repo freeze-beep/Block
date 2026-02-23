@@ -7,17 +7,13 @@ const config = {
     phoneNumber: "243986860268",
     name: "AYANOKOJI-BOT",
     chef: "Kiyotaka Ayanokoji",
-    section: "Classroom of the Elite",
     prefix: ".",
     image: "https://i.supaimg.com/ba0cda0b-0be1-4bc3-b8c9-c0f903bcc6bf/cee23d05-8cd3-49de-b6ee-8df91763633a.jpg"
 };
 
-// Serveur pour Render
+// Serveur de maintien Render
 const port = process.env.PORT || 3000;
-http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end('System Online');
-}).listen(port);
+http.createServer((req, res) => { res.writeHead(200); res.end('Elite System Active'); }).listen(port);
 
 async function start() {
     const { state, saveCreds } = await useMultiFileAuthState('session_elite');
@@ -28,8 +24,7 @@ async function start() {
         auth: state,
         logger: pino({ level: "silent" }),
         printQRInTerminal: false,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
-        generateHighQualityLinkPreview: false
+        browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
     if (!sock.authState.creds.registered) {
@@ -56,19 +51,10 @@ async function start() {
         const arg = body.slice(config.prefix.length).trim().split(/ +/g);
         const cmd = arg.shift().toLowerCase();
 
-        // Gestionnaire de permissions et d'erreurs
-        const checkAdmin = async () => {
-            if (!isGroup) {
-                await sock.sendMessage(from, { text: "❌ *Erreur :* Cette commande est réservée aux groupes." });
-                return false;
-            }
-            const metadata = await sock.groupMetadata(from);
-            const me = metadata.participants.find(p => p.id === sock.user.id.split(':')[0] + '@s.whatsapp.net');
-            if (!me.admin) {
-                await sock.sendMessage(from, { text: "❌ *Erreur :* Je dois être administrateur pour exécuter cela." });
-                return false;
-            }
-            return true;
+        const getAdmin = async () => {
+            if (!isGroup) return false;
+            const meta = await sock.groupMetadata(from);
+            return !!meta.participants.find(p => p.id === sock.user.id.split(':')[0] + '@s.whatsapp.net')?.admin;
         };
 
         try {
@@ -81,96 +67,89 @@ async function start() {
 ┃ 👤 *Maître :* ${config.chef}
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
-*⚔️ GESTION*
-ϟ .promote
-ϟ .demote
-ϟ .kick
-ϟ .purge
-ϟ .tagadmin
-ϟ .del
-ϟ .block
-ϟ .unblock
-ϟ .link
-ϟ .revoke
+ ⚡ *SECTION : GESTION*
+ ━━━━━━━━━━━━━━━
+ ϟ .promote
+ ϟ .demote
+ ϟ .kick
+ ϟ .purge
+ ϟ .tagadmin
+ ϟ .del
+ ϟ .block
+ ϟ .unblock
+ ━━━━━━━━━━━━━━━
 
-*🛡️ PROTECTION*
-ϟ .antilink
-ϟ .antibot
-ϟ .welcome
-ϟ .antivv
-ϟ .antidelete
+ 🛡️ *SECTION : PROTECTION*
+ ━━━━━━━━━━━━━━━
+ ϟ .antilink
+ ϟ .antibot
+ ϟ .welcome
+ ϟ .antivv
+ ━━━━━━━━━━━━━━━
 
-*🌑 DOMINATION*
-ϟ .domination
-ϟ .liberation
-ϟ .hidetag
-ϟ .totext
-ϟ .tovocal
-ϟ .poll
-ϟ .setname
-ϟ .setdesc
+ 🌑 *SECTION : DOMINATION*
+ ━━━━━━━━━━━━━━━
+ ϟ .domination
+ ϟ .liberation
+ ϟ .hidetag
+ ϟ .setname
+ ϟ .setdesc
+ ━━━━━━━━━━━━━━━
 
-*🎭 TECHNIQUE*
-ϟ .owner
-ϟ .vv
-ϟ .ping
-ϟ .runtime
-ϟ .getpic
-ϟ .groupinfo
-ϟ .cls
-ϟ .speed
-ϟ .cpu
+ 🎭 *SECTION : TECHNIQUE*
+ ━━━━━━━━━━━━━━━
+ ϟ .owner
+ ϟ .vv
+ ϟ .ping
+ ϟ .runtime
+ ϟ .speed
+ ━━━━━━━━━━━━━━━
 
-*🎲 FUN*
-ϟ .love
-ϟ .ship
-ϟ .quote
-ϟ .say
-ϟ .insulte
-ϟ .lyrics
-ϟ .weather
-ϟ .joke
-ϟ .dare
-ϟ .truth
-
-*BY DARK ZEN SYSTEM*`;
+ 🎲 *SECTION : LOISIR*
+ ━━━━━━━━━━━━━━━
+ ϟ .love
+ ϟ .quote
+ ϟ .say
+ ϟ .insulte
+ ϟ .weather
+ ━━━━━━━━━━━━━━━
+ *BY DARK ZEN SYSTEM*`;
                     await sock.sendMessage(from, { image: { url: config.image }, caption: menu }, { quoted: msg });
                     break;
 
                 case 'owner':
-                    const bio = `╭━━━〔 *DOSSIER ÉLITE* 〕━━━┈⊷
-┃ 👤 *Créateur :* ${config.chef}
-┃ 📚 *Section :* ${config.section}
-┃ 🌑 *Statut :* Sujet n°401
-╰━━━━━━━━━━━━━━━━━━┈⊷
-*“Peu importe la méthode, tant que je gagne à la fin.”*`;
+                case 'honneur':
+                    const bio = `╭━━━〔 *BIOGRAPHIE* 〕━━━┈⊷
+┃ 👤 *Nom :* Kiyotaka Ayanokoji
+┃ 🌑 *Statut :* Leader Élite
+╰━━━━━━━━━━━━━━━━━━┈⊷`;
                     await sock.sendMessage(from, { image: { url: config.image }, caption: bio }, { quoted: msg });
                     break;
 
-                case 'ping': 
-                    await sock.sendMessage(from, { text: "🚀 *Vitesse de calcul : 0.01ms*" }); 
-                    break;
+                case 'ping': await sock.sendMessage(from, { text: "🚀 *Système réactif.*" }); break;
 
-                case 'purge':
-                case 'kick':
-                case 'promote':
-                case 'demote':
-                    if (!isOwner) return;
-                    if (await checkAdmin()) {
-                        let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
-                        if (cmd === 'purge') {
-                            const mt = await sock.groupMetadata(from);
-                            for (let p of mt.participants) { if (!p.admin) { await delay(300); await sock.groupParticipantsUpdate(from, [p.id], "remove"); } }
-                        } else if (target) {
-                            await sock.groupParticipantsUpdate(from, [target], cmd === 'kick' ? 'remove' : cmd);
+                case 'domination':
+                    if (isOwner && isGroup) {
+                        if (await getAdmin()) {
+                            await sock.groupSettingUpdate(from, 'announcement');
+                            await sock.sendMessage(from, { text: "🌑 *Le groupe est maintenant sous contrôle total (Fermé).*"});
+                        } else {
+                            await sock.sendMessage(from, { text: "❌ *Erreur :* Donnez les droits admin au bot."});
                         }
                     }
                     break;
 
+                case 'liberation':
+                    if (isOwner && isGroup && await getAdmin()) {
+                        await sock.groupSettingUpdate(from, 'not_announcement');
+                        await sock.sendMessage(from, { text: "🔓 *Le groupe est libéré (Ouvert).* "});
+                    }
+                    break;
+
                 case 'hidetag':
-                    if (isOwner && await checkAdmin()) {
+                    if (isOwner && isGroup) {
                         const meta = await sock.groupMetadata(from);
-                        await sock.sendMessage(from, { text: arg.join(' '), mentions: meta.participants.map(a => a.id) });
+                        await sock.sendMessage(from, { text: arg.join(' ') || 'Attention !', mentions: meta.participants.map(a => a.id) });
                     }
                     break;
 
@@ -181,15 +160,20 @@ async function start() {
                         const stream = await downloadContentFromMessage(q[type], type.replace('Message', ''));
                         let buffer = Buffer.from([]);
                         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-                        await sock.sendMessage(from, { [type.replace('Message', '')]: buffer, caption: "🌑 *Secret révélé.*" });
+                        await sock.sendMessage(from, { [type.replace('Message', '')]: buffer, caption: "🌑 *Vue unique extraite.*" });
                     }
                     break;
 
-                case 'say': 
-                    await sock.sendMessage(from, { text: arg.join(' ') }); 
+                case 'kick':
+                    if (isOwner && isGroup && await getAdmin()) {
+                        let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
+                        if (target) await sock.groupParticipantsUpdate(from, [target], 'remove');
+                    }
                     break;
+                
+                case 'say': await sock.sendMessage(from, { text: arg.join(' ') }); break;
             }
-        } catch (e) { console.log(e); }
+        } catch (e) { console.log("Erreur :", e); }
     });
 }
 start();

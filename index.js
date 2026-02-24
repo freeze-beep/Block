@@ -15,6 +15,9 @@ const config = {
 // Configuration des groupes
 let groupSettings = {};
 
+// Système de tentatives pour antilink
+let userWarnings = {};
+
 // Charger les paramètres des groupes
 if (fs.existsSync('group_settings.json')) {
     groupSettings = JSON.parse(fs.readFileSync('group_settings.json'));
@@ -81,18 +84,60 @@ async function start() {
                 antilink: false,
                 antibot: false,
                 welcome: false,
-                antivv: false
+                antivv: false,
+                domination: false
             };
             saveGroupSettings();
         }
 
+        // Vérifier si le mode domination est activé
+        if (isGroup && groupSettings[from]?.domination && !isOwner) {
+            const isAdmin = await getSenderAdmin();
+            if (!isAdmin && !msg.key.fromMe) {
+                await sock.sendMessage(from, { 
+                    text: "🌑 *Mode Domination activé. Seuls les admins peuvent parler.*",
+                    delete: msg.key 
+                });
+                return;
+            }
+        }
+
         // Vérifier les liens si antilink est activé
-        if (isGroup && groupSettings[from]?.antilink && !isOwner) {
+        if (isGroup && groupSettings[from]?.antilink && !isOwner && !await getSenderAdmin()) {
             const linkRegex = /(https?:\/\/[^\s]+)|(chat\.whatsapp\.com\/[^\s]+)/gi;
             if (linkRegex.test(body)) {
-                await sock.sendMessage(from, { text: "❌ *Liens interdits dans ce groupe!*" });
-                if (await getAdmin()) {
-                    await sock.groupParticipantsUpdate(from, [sender], 'remove');
+                // Initialiser les avertissements pour l'utilisateur
+                if (!userWarnings[sender]) {
+                    userWarnings[sender] = { count: 0, group: from };
+                }
+                
+                // Réinitialiser si c'est pour un autre groupe
+                if (userWarnings[sender].group !== from) {
+                    userWarnings[sender] = { count: 0, group: from };
+                }
+                
+                userWarnings[sender].count++;
+                const remaining = 4 - userWarnings[sender].count;
+                
+                // Supprimer le message contenant le lien
+                await sock.sendMessage(from, { delete: msg.key });
+                
+                if (userWarnings[sender].count >= 4) {
+                    // Expulser après 4 avertissements
+                    if (await getAdmin()) {
+                        await sock.sendMessage(from, { 
+                            text: `❌ *@${sender.split('@')[0]} a été expulsé pour avoir envoyé des liens à répétition.*`,
+                            mentions: [sender]
+                        });
+                        await sock.groupParticipantsUpdate(from, [sender], 'remove');
+                        delete userWarnings[sender];
+                    }
+                } else {
+                    // Envoyer un avertissement
+                    await sock.sendMessage(from, { 
+                        text: `⚠️ *@${sender.split('@')[0]}, les liens sont interdits!*\n\n🚫 *Avertissement ${userWarnings[sender].count}/4*\n💢 *Il te reste ${remaining} tentative(s) avant expulsion.*`,
+                        mentions: [sender]
+                    });
                 }
                 return;
             }
@@ -101,7 +146,11 @@ async function start() {
         // Vérifier les bots si antibot est activé
         if (isGroup && groupSettings[from]?.antibot && !isOwner) {
             if (msg.key.fromMe === false && sender.includes('bot')) {
-                await sock.sendMessage(from, { text: "❌ *Bots interdits dans ce groupe!*" });
+                await sock.sendMessage(from, { delete: msg.key });
+                await sock.sendMessage(from, { 
+                    text: `❌ *@${sender.split('@')[0]}, les bots sont interdits dans ce groupe!*`,
+                    mentions: [sender]
+                });
                 if (await getAdmin()) {
                     await sock.groupParticipantsUpdate(from, [sender], 'remove');
                 }
@@ -114,7 +163,8 @@ async function start() {
             const metadata = await sock.groupMetadata(from);
             const participant = msg.key.participant;
             await sock.sendMessage(from, { 
-                text: `👋 *Bienvenue ${metadata.participants.find(p => p.id === participant)?.notify || 'membre'} dans ${metadata.subject}!*\n📝 *Règles:* Lisez la description du groupe.` 
+                text: `👋 *Bienvenue @${participant.split('@')[0]} dans ${metadata.subject}!*\n📝 *Règles:* Lisez la description du groupe.`,
+                mentions: [participant]
             });
         }
 
@@ -156,7 +206,7 @@ async function start() {
 ┃ • ${config.prefix}promote [@user]  ┃
 ┃ • ${config.prefix}demote [@user]   ┃
 ┃ • ${config.prefix}kick [@user]     ┃
-┃ • ${config.prefix}purge <nombre>   ┃
+┃ • ${config.prefix}purge            ┃
 ┃ • ${config.prefix}tagadmin         ┃
 ┃ • ${config.prefix}del               ┃
 ┃ • ${config.prefix}block [@user]    ┃
@@ -179,6 +229,7 @@ async function start() {
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ • ${config.prefix}domination       ┃
 ┃ • ${config.prefix}liberation       ┃
+┃ • ${config.prefix}tagall <texte>   ┃
 ┃ • ${config.prefix}hidetag <texte>  ┃
 ┃ • ${config.prefix}setname <nom>    ┃
 ┃ • ${config.prefix}setdesc <desc>   ┃
@@ -259,7 +310,10 @@ async function start() {
                         let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || arg[0]?.replace('@', '') + '@s.whatsapp.net';
                         if (target) {
                             await sock.groupParticipantsUpdate(from, [target], 'promote');
-                            await sock.sendMessage(from, { text: `✅ *${target.split('@')[0]} a été promu admin.*` });
+                            await sock.sendMessage(from, { 
+                                text: `✅ *@${target.split('@')[0]} a été promu admin.*`,
+                                mentions: [target]
+                            });
                         }
                     }
                     break;
@@ -269,7 +323,10 @@ async function start() {
                         let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || arg[0]?.replace('@', '') + '@s.whatsapp.net';
                         if (target) {
                             await sock.groupParticipantsUpdate(from, [target], 'demote');
-                            await sock.sendMessage(from, { text: `✅ *${target.split('@')[0]} a été rétrogradé.*` });
+                            await sock.sendMessage(from, { 
+                                text: `✅ *@${target.split('@')[0]} a été rétrogradé.*`,
+                                mentions: [target]
+                            });
                         }
                     }
                     break;
@@ -279,22 +336,50 @@ async function start() {
                         let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
                         if (target) {
                             await sock.groupParticipantsUpdate(from, [target], 'remove');
-                            await sock.sendMessage(from, { text: `✅ *Membre expulsé.*` });
+                            await sock.sendMessage(from, { 
+                                text: `✅ *@${target.split('@')[0]} a été expulsé.*`,
+                                mentions: [target]
+                            });
                         }
                     }
                     break;
 
                 case 'purge':
-                    if (isGroup && await getSenderAdmin()) {
-                        const amount = parseInt(arg[0]) || 50;
-                        const messages = await sock.loadMessages(from, amount);
-                        for (let message of messages) {
-                            if (message.key.fromMe || isOwner) {
-                                await sock.sendMessage(from, { delete: message.key });
-                                await delay(500);
+                    if (isGroup && await getSenderAdmin() && await getAdmin()) {
+                        // Annoncer le début de la purge
+                        await sock.sendMessage(from, { 
+                            text: "🌑 *Kiyotaka Ayanokoji vous réduira au silence...*\n\n⚔️ *La purge commence maintenant !*" 
+                        });
+                        
+                        await delay(2000);
+                        
+                        // Récupérer tous les membres du groupe
+                        const metadata = await sock.groupMetadata(from);
+                        const participants = metadata.participants;
+                        
+                        // Filtrer pour ne pas supprimer les admins et le bot lui-même
+                        const toRemove = participants.filter(p => 
+                            !p.admin && 
+                            p.id !== sock.user.id.split(':')[0] + '@s.whatsapp.net' &&
+                            !p.id.includes(config.owner)
+                        ).map(p => p.id);
+                        
+                        if (toRemove.length > 0) {
+                            // Supprimer les membres par lots de 5 pour éviter les limites
+                            for (let i = 0; i < toRemove.length; i += 5) {
+                                const batch = toRemove.slice(i, i + 5);
+                                await sock.groupParticipantsUpdate(from, batch, 'remove');
+                                await delay(2000);
                             }
+                            
+                            await sock.sendMessage(from, { 
+                                text: `⚔️ *${toRemove.length} membres ont été réduits au silence.*\n\n🌑 *Kiyotaka Ayanokoji vous a relevé de vos fonctions. Restez réduit à n'être qu'une créature inférieure.*` 
+                            });
+                        } else {
+                            await sock.sendMessage(from, { 
+                                text: "🌑 *Aucun membre à purger. Tout le monde est déjà digne...*" 
+                            });
                         }
-                        await sock.sendMessage(from, { text: `✅ *${amount} messages supprimés.*` });
                     }
                     break;
 
@@ -320,7 +405,10 @@ async function start() {
                         let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || arg[0]?.replace('@', '') + '@s.whatsapp.net';
                         if (target) {
                             await sock.updateBlockStatus(target, 'block');
-                            await sock.sendMessage(from, { text: `✅ *${target.split('@')[0]} a été bloqué.*` });
+                            await sock.sendMessage(from, { 
+                                text: `✅ *@${target.split('@')[0]} a été bloqué.*`,
+                                mentions: [target]
+                            });
                         }
                     }
                     break;
@@ -330,7 +418,10 @@ async function start() {
                         let target = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || arg[0]?.replace('@', '') + '@s.whatsapp.net';
                         if (target) {
                             await sock.updateBlockStatus(target, 'unblock');
-                            await sock.sendMessage(from, { text: `✅ *${target.split('@')[0]} a été débloqué.*` });
+                            await sock.sendMessage(from, { 
+                                text: `✅ *@${target.split('@')[0]} a été débloqué.*`,
+                                mentions: [target]
+                            });
                         }
                     }
                     break;
@@ -343,8 +434,17 @@ async function start() {
                             groupSettings[from].antilink = status === 'on';
                             saveGroupSettings();
                             await sock.sendMessage(from, { 
-                                text: `🛡️ *Antilink ${status === 'on' ? 'activé' : 'désactivé'}.*` 
+                                text: `🛡️ *Antilink ${status === 'on' ? 'activé' : 'désactivé'}.*\n${status === 'on' ? '⚠️ *4 avertissements puis expulsion.*' : ''}` 
                             });
+                            
+                            // Réinitialiser les avertissements si désactivé
+                            if (status === 'off') {
+                                for (let user in userWarnings) {
+                                    if (userWarnings[user].group === from) {
+                                        delete userWarnings[user];
+                                    }
+                                }
+                            }
                         }
                     }
                     break;
@@ -392,9 +492,11 @@ async function start() {
                 case 'domination':
                     if (isOwner && isGroup) {
                         if (await getAdmin()) {
+                            groupSettings[from].domination = true;
+                            saveGroupSettings();
                             await sock.groupSettingUpdate(from, 'announcement');
                             await sock.sendMessage(from, { 
-                                text: "🌑 *Le groupe est maintenant sous contrôle total.*\n📢 *Seuls les admins peuvent envoyer des messages.*" 
+                                text: "🌑 *Mode Domination activé.*\n\n📢 *Seuls les admins peuvent désormais parler.*\n💢 *Les autres membres seront réduits au silence.*" 
                             });
                         } else {
                             await sock.sendMessage(from, { text: "❌ *Donnez les droits admin au bot.*" });
@@ -404,9 +506,24 @@ async function start() {
 
                 case 'liberation':
                     if (isOwner && isGroup && await getAdmin()) {
+                        groupSettings[from].domination = false;
+                        saveGroupSettings();
                         await sock.groupSettingUpdate(from, 'not_announcement');
                         await sock.sendMessage(from, { 
-                            text: "🔓 *Le groupe est libéré.*\n💬 *Tous les membres peuvent envoyer des messages.*" 
+                            text: "🔓 *Mode Domination désactivé.*\n\n💬 *Tous les membres peuvent à nouveau parler.*" 
+                        });
+                    }
+                    break;
+
+                case 'tagall':
+                    if (isOwner && isGroup) {
+                        const meta = await sock.groupMetadata(from);
+                        const mentions = meta.participants.map(a => a.id);
+                        const message = arg.join(' ') || '🔔 *Notification à tous les membres*';
+                        
+                        await sock.sendMessage(from, { 
+                            text: `📢 *Message du maître:*\n\n${message}\n\n👥 *Membres:*\n${mentions.map(id => `@${id.split('@')[0]}`).join('\n')}`,
+                            mentions: mentions 
                         });
                     }
                     break;
